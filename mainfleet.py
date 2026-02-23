@@ -26,7 +26,7 @@ cmd = [
     "-maxrate", "2M",           # Keep bitrate tight for 5G
     "-bufsize", "4M",           # Internal ffmpeg buffer
     "-pix_fmt", "yuv420p",
-    "-g", "60",                 # Keyframe every 2 seconds for better recovery
+    "-g", "30",                 # Keyframe every 2 seconds for better recovery
     "-f", "mpegts",
     SRT_URL
 ]
