@@ -18,7 +18,7 @@ cmd = [
     "-f", "v4l2",
     "-input_format", "mjpeg",   
     "-video_size", "1280x720",  
-    "-framerate", "30",
+    "-framerate", "15",
     "-i", "/dev/video0",        
     "-c:v", "libx264",          
     "-preset", "ultrafast",     
@@ -27,7 +27,7 @@ cmd = [
     "-maxrate", "2M",           
     "-bufsize", "4M",           
     "-pix_fmt", "yuv420p",
-    "-g", "30",                 
+    "-g", "15",                 
     "-f", "mpegts",
     SRT_URL
 ]
