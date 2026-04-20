@@ -1,15 +1,16 @@
 import subprocess
+import os
 import sys
 import time
 
-# CONFIGURATION
-SERVER_IP = "100.89.114.117" 
-DRIVER_ID = "pi_unit_01"
+# CONFIGURATION - These now come from Docker/Environment Variables
+# If not set, it defaults to your current test settings
+SERVER_IP = os.getenv("SERVER_IP", "100.97.37.123") 
+UNIT_ID = os.getenv("UNIT_ID", "UNASSIGNED_PI")
 
-# SRT SETTINGS: 
-# latency=30000000 (30 seconds in microseconds)
-# conntimeout=5000000 (5 seconds to wait for a handshake)
-SRT_URL = f"srt://{SERVER_IP}:8890?streamid=publish:{DRIVER_ID}&latency=30000000&mode=caller&conntimeout=5000000"
+# SRT SETTINGS
+# Using the UNIT_ID dynamically in the streamid
+SRT_URL = f"srt://{SERVER_IP}:8890?streamid=publish:{UNIT_ID}&latency=30000000&mode=caller&conntimeout=5000000"
 
 # PI 5 OPTIMIZED COMMAND
 cmd = [
@@ -23,35 +24,34 @@ cmd = [
     "-preset", "ultrafast",     
     "-tune", "zerolatency",
     "-b:v", "2M",               
-    "-maxrate", "2M",           # Keep bitrate tight for 5G
-    "-bufsize", "4M",           # Internal ffmpeg buffer
+    "-maxrate", "2M",           
+    "-bufsize", "4M",           
     "-pix_fmt", "yuv420p",
-    "-g", "30",                 # Keyframe every 2 seconds for better recovery
+    "-g", "30",                 
     "-f", "mpegts",
     SRT_URL
 ]
 
-print(f"--- STARTING PI 5 USB STREAM WITH 30s BUFFER ---")
+print(f"--- STARTING {UNIT_ID} USB STREAM ---")
 print(f"Target Server: {SERVER_IP}")
 
-# Start the process
-process = subprocess.Popen(cmd)
-
-try:
-    while True:
-        # Check if the ffmpeg process died
-        if process.poll() is not None:
-            print("Process died or connection lost. Restarting in 5 seconds...")
-            time.sleep(5)
-            process = subprocess.Popen(cmd)
-        
-        # Heartbeat check every second
-        time.sleep(1)
-
-except KeyboardInterrupt:
-    print("\nStopping stream...")
-    process.terminate()
+def run_stream():
     try:
-        process.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        process.kill()
+        process = subprocess.Popen(cmd)
+        while True:
+            if process.poll() is not None:
+                print(f"Connection to {SERVER_IP} lost. Restarting...")
+                return # Exit this loop to trigger restart
+            time.sleep(1)
+    except Exception as e:
+        print(f"Error: {e}")
+        return
+
+if __name__ == "__main__":
+    try:
+        while True:
+            run_stream()
+            time.sleep(5) # Wait before restart
+    except KeyboardInterrupt:
+        print("\nStopping Fleet Unit...")
+        sys.exit(0)
