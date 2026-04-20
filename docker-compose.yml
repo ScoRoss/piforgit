@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  vault_unit:
+    build: .
+    container_name: vault_service
+    restart: always
+    privileged: true # Required for Camera/GPU access
+    network_mode: host # Crucial for Tailscale communication
+    devices:
+      - "/dev/video0:/dev/video0"
+    environment:
+      - UNIT_ID=${UNIT_ID}
+      - SERVER_IP=100.97.37.123
