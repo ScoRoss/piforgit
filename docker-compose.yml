@@ -9,6 +9,7 @@ services:
     network_mode: host # Crucial for Tailscale communication
     devices:
       - "/dev/video0:/dev/video0"
+      - "/dev/media0:/dev/media0"
     environment:
       - UNIT_ID=${UNIT_ID}
       - SERVER_IP=100.97.37.123
