@@ -5,11 +5,18 @@ services:
     build: .
     container_name: vault_service
     restart: always
-    privileged: true # Required for Camera/GPU access
-    network_mode: host # Crucial for Tailscale communication
+    privileged: true # Automatically grants full root-level access to the camera and GPU
+    network_mode: host # Allows the container to see the Pi's Tailscale IP interface seamlessly
+    
     devices:
       - "/dev/video0:/dev/video0"
-      - "/dev/media0:/dev/media0"
+      - "/dev/video1:/dev/video1"
+      - "/dev/media3:/dev/media3" # Matches your specific USB camera controller hardware
+      
+    volumes:
+      - /dev:/dev # Fallback map to ensure ffmpeg never loses hardware visibility if paths dynamically shift
+      
     environment:
       - UNIT_ID=${UNIT_ID}
-      - SERVER_IP=100.97.37.123
+      - SERVER_IP=100.97.37.123 # Where ffmpeg shoots the secure private SRT video traffic
+      - SERVER_URL=https://27carslivestream.co.uk # Where the Python loop fetches pairing commands/heartbeats
