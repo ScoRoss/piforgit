@@ -18,23 +18,12 @@ current_status = "AVAILABLE"  # Boots up idle
 assigned_driver = None
 stream_process = None
 
-# SRT SETTINGS
-SRT_URL = f"srt://{SERVER_IP}:8890?streamid=publish:{UNIT_ID}&latency=30000000&mode=caller&conntimeout=5000000"
-
-# PI 5 OPTIMIZED COMMAND (15 FPS)
-cmd = [
-    "ffmpeg", "-f", "v4l2", "-input_format", "mjpeg",   
-    "-video_size", "1280x720", "-framerate", "15",         
-    "-i", "/dev/video0", "-c:v", "libx264",          
-    "-preset", "ultrafast", "-tune", "zerolatency",
-    "-b:v", "2M", "-maxrate", "2M", "-bufsize", "4M",           
-    "-pix_fmt", "yuv420p", "-g", "15", "-f", "mpegts",
-    SRT_URL
-]
+# DYNAMIC STREAM STORAGE
+current_stream_url = ""
 
 def comms_loop():
     """Background thread: Sends status AND asks for commands every 5 seconds."""
-    global current_status, assigned_driver
+    global current_status, assigned_driver, current_stream_url
     
     while True:
         # 1. SEND HEARTBEAT (Tell the server our current state)
@@ -54,9 +43,17 @@ def comms_loop():
                 data = response.json()
                 command = data.get("command")
                 
-                # If backend says "PAIR", trigger the start sequence
+                # If backend says "PAIR", trigger the start sequence dynamically
                 if command == "PAIR" and current_status != "STREAMING":
                     assigned_driver = data.get("driver", "Unknown")
+                    
+                    # Pull dynamic routing targets from the API, or fallback to defaults
+                    target_ip = data.get("stream_target", SERVER_IP)
+                    stream_key = data.get("stream_key", UNIT_ID)
+                    
+                    # Construct the precise SRT destination path for this specific job session
+                    current_stream_url = f"srt://{target_ip}:8890?streamid=publish:{stream_key}&latency=30000000&mode=caller&conntimeout=5000000"
+                    
                     current_status = "STARTING"
                 
                 # If backend says "UNPAIR", trigger the stop sequence
@@ -68,21 +65,37 @@ def comms_loop():
         
         time.sleep(5) # Wait 5 seconds before asking again
 
+def build_ffmpeg_cmd(srt_target_url):
+    """Generates a fresh Pi 5 optimized ffmpeg command array on demand."""
+    return [
+        "ffmpeg", "-f", "v4l2", "-input_format", "mjpeg",   
+        "-video_size", "1280x720", "-framerate", "15",         
+        "-i", "/dev/video0", "-c:v", "libx264",          
+        "-preset", "ultrafast", "-tune", "zerolatency",
+        "-b:v", "2M", "-maxrate", "2M", "-bufsize", "4M",           
+        "-pix_fmt", "yuv420p", "-g", "15", "-f", "mpegts",
+        srt_target_url
+    ]
+
 def manage_stream():
     """Main thread: Turns the camera on or off based on the current status."""
-    global current_status, stream_process
+    global current_status, stream_process, current_stream_url
     
     while True:
         if current_status == "STARTING":
-            print(f"Paired with {assigned_driver}. Engaging Camera...")
-            stream_process = subprocess.Popen(cmd)
+            print(f"Paired with {assigned_driver}. Engaging Camera targeting {current_stream_url}...")
+            
+            # Generate the command line string with the fresh stream key details
+            dynamic_cmd = build_ffmpeg_cmd(current_stream_url)
+            stream_process = subprocess.Popen(dynamic_cmd)
             current_status = "STREAMING"
         
         elif current_status == "STREAMING":
-            # Self-healing: If ffmpeg crashes while it should be streaming, restart it
+            # Self-healing: If ffmpeg crashes while it should be streaming, recreate using same dynamic url
             if stream_process and stream_process.poll() is not None:
-                print("Stream crashed or connection lost. Restarting...")
-                stream_process = subprocess.Popen(cmd)
+                print("Stream crashed or connection lost. Restarting stream runtime...")
+                dynamic_cmd = build_ffmpeg_cmd(current_stream_url)
+                stream_process = subprocess.Popen(dynamic_cmd)
         
         elif current_status == "STOPPING":
             if stream_process:
