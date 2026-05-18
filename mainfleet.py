@@ -8,67 +8,63 @@ import requests
 # CONFIGURATION
 SERVER_IP = os.getenv("SERVER_IP", "100.97.37.123") 
 UNIT_ID = os.getenv("UNIT_ID", "UNASSIGNED_PI")
-
-# API URLS
-STATUS_URL = os.getenv("STATUS_URL", "https://27carslivestream.co.uk/api/status")
-COMMAND_URL = os.getenv("COMMAND_URL", f"https://27carslivestream.co.uk/api/command?unit_id={UNIT_ID}")
+BASE_API_URL = "https://27carslivestream.co.uk"
 
 # STATE VARIABLES
 current_status = "AVAILABLE"  # Boots up idle
 assigned_driver = None
 stream_process = None
-
-# DYNAMIC STREAM STORAGE
 current_stream_url = ""
 
 def comms_loop():
     """Background thread: Sends status AND asks for commands every 5 seconds."""
     global current_status, assigned_driver, current_stream_url
     
+    # Construct urls dynamically to ensure any runtime identity adjustments are clean
+    status_url = f"{BASE_API_URL}/api/status"
+    command_url = f"{BASE_API_URL}/api/command?unit_id={UNIT_ID}"
+    
+    print(f"[*] Comms thread polling started for Unit ID: {UNIT_ID}")
+    
     while True:
-        # 1. SEND HEARTBEAT (Tell the server our current state)
+        # 1. SEND HEARTBEAT
         try:
-            requests.post(STATUS_URL, json={
+            requests.post(status_url, json={
                 "unit_id": UNIT_ID,
                 "status": current_status,
                 "driver": assigned_driver
             }, timeout=5)
         except Exception:
-            pass # Ignore network blips
+            pass 
 
-        # 2. CHECK FOR COMMANDS (Ask the server what we should do)
+        # 2. CHECK FOR COMMANDS
         try:
-            response = requests.get(COMMAND_URL, timeout=5)
+            response = requests.get(command_url, timeout=5)
             if response.status_code == 200:
                 data = response.json()
                 command = data.get("command")
                 
-                # If backend says "PAIR", trigger the start sequence dynamically
-                if command == "PAIR" and current_status != "STREAMING":
+                if command == "PAIR" and current_status != "STREAMING" and current_status != "STARTING":
                     assigned_driver = data.get("driver", "Unknown")
-                    
-                    # Pull dynamic routing targets from the API, or fallback to defaults
                     target_ip = data.get("stream_target", SERVER_IP)
                     stream_key = data.get("stream_key", UNIT_ID)
                     
-                    # Construct the precise SRT destination path for this specific job session
-                    current_stream_url = f"srt://{target_ip}:8890?streamid=publish:{stream_key}&latency=30000000&mode=caller&conntimeout=5000000"
-                    
+                    # TUNED: Latency dropped from 30s (30000000) to 300ms (300000)
+                    current_stream_url = f"srt://{target_ip}:8890?streamid=publish:{stream_key}&latency=300000&mode=caller&conntimeout=5000000"
                     current_status = "STARTING"
                 
-                # If backend says "UNPAIR", trigger the stop sequence
                 elif command == "UNPAIR" and current_status != "AVAILABLE":
                     assigned_driver = None
                     current_status = "STOPPING"
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[!] Network error checking command gateway: {e}")
         
-        time.sleep(5) # Wait 5 seconds before asking again
+        time.sleep(5)
 
 def build_ffmpeg_cmd(srt_target_url):
     """Generates a fresh Pi 5 optimized ffmpeg command array on demand."""
     return [
-        "ffmpeg", "-f", "v4l2", "-input_format", "mjpeg",   
+        "ffmpeg", "-y", "-f", "v4l2", "-input_format", "mjpeg",   
         "-video_size", "1280x720", "-framerate", "15",         
         "-i", "/dev/video0", "-c:v", "libx264",          
         "-preset", "ultrafast", "-tune", "zerolatency",
@@ -83,24 +79,30 @@ def manage_stream():
     
     while True:
         if current_status == "STARTING":
-            print(f"Paired with {assigned_driver}. Engaging Camera targeting {current_stream_url}...")
-            
-            # Generate the command line string with the fresh stream key details
+            print(f"[+] Paired with {assigned_driver}. Engaging Camera targeting {current_stream_url}...")
             dynamic_cmd = build_ffmpeg_cmd(current_stream_url)
-            stream_process = subprocess.Popen(dynamic_cmd)
+            
+            # Explicitly redirect stderr to stdout so all internal encoder issues show up clearly
+            stream_process = subprocess.Popen(dynamic_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
             current_status = "STREAMING"
         
         elif current_status == "STREAMING":
-            # Self-healing: If ffmpeg crashes while it should be streaming, recreate using same dynamic url
             if stream_process and stream_process.poll() is not None:
-                print("Stream crashed or connection lost. Restarting stream runtime...")
+                print("[!] Stream crashed or connection lost. Output telemetry analysis:")
+                # Output the exact terminal error lines from ffmpeg to diagnose why it dropped
+                if stream_process.stdout:
+                    output = stream_process.stdout.read()
+                    print(output)
+                
+                print("[*] Attempting runtime execution self-heal...")
                 dynamic_cmd = build_ffmpeg_cmd(current_stream_url)
-                stream_process = subprocess.Popen(dynamic_cmd)
+                stream_process = subprocess.Popen(dynamic_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         
         elif current_status == "STOPPING":
             if stream_process:
-                print("Unpaired. Disengaging Camera...")
+                print("[-] Unpaired. Disengaging Camera pipeline...")
                 stream_process.terminate()
+                stream_process.wait()
                 stream_process = None
             current_status = "AVAILABLE"
             
@@ -109,7 +111,6 @@ def manage_stream():
 if __name__ == "__main__":
     print(f"--- {UNIT_ID} BOOTED. WAITING FOR DISPATCH ---")
     
-    # Start the Comms thread to talk to the API
     comms_thread = threading.Thread(target=comms_loop, daemon=True)
     comms_thread.start()
 
