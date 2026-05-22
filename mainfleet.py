@@ -69,7 +69,7 @@ def build_ffmpeg_cmd(srt_target_url):
         "-i", "/dev/video0", "-c:v", "libx264",          
         "-preset", "ultrafast", "-tune", "zerolatency",
         "-b:v", "2M", "-maxrate", "2M", "-bufsize", "4M",           
-        "-pix_fmt", "yuv420p", "-g", "15", "-f", "mpegts",
+        "-pix_fmt", "yuv420p", "-g", "30", "-f", "mpegts",
         srt_target_url
     ]
 
