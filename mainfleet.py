@@ -82,21 +82,16 @@ def manage_stream():
             print(f"[+] Paired with {assigned_driver}. Engaging Camera targeting {current_stream_url}...")
             dynamic_cmd = build_ffmpeg_cmd(current_stream_url)
             
-            # Explicitly redirect stderr to stdout so all internal encoder issues show up clearly
-            stream_process = subprocess.Popen(dynamic_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            # FIX: Remove the stdout pipe trap. Let FFmpeg output directly to the console or a file.
+            stream_process = subprocess.Popen(dynamic_cmd)
             current_status = "STREAMING"
         
         elif current_status == "STREAMING":
+            # If the process actually dies, handle the crash
             if stream_process and stream_process.poll() is not None:
-                print("[!] Stream crashed or connection lost. Output telemetry analysis:")
-                # Output the exact terminal error lines from ffmpeg to diagnose why it dropped
-                if stream_process.stdout:
-                    output = stream_process.stdout.read()
-                    print(output)
-                
-                print("[*] Attempting runtime execution self-heal...")
+                print("[!] Stream crashed or connection lost. Attempting self-heal...")
                 dynamic_cmd = build_ffmpeg_cmd(current_stream_url)
-                stream_process = subprocess.Popen(dynamic_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                stream_process = subprocess.Popen(dynamic_cmd)
         
         elif current_status == "STOPPING":
             if stream_process:
