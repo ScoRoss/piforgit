@@ -62,11 +62,12 @@ def comms_loop():
         time.sleep(5)
 
 def build_ffmpeg_cmd(srt_target_url):
-    """Generates a fresh Pi 5 optimized ffmpeg command array on demand."""
+    """Generates a fresh Pi 5 optimized ffmpeg command array using camera defaults."""
     return [
-        "ffmpeg", "-y", "-f", "v4l2", "-input_format", "mjpeg",   
-        "-video_size", "1280x720", "-framerate", "15",         
-        "-i", "/dev/video0", "-c:v", "libx264",          
+        "ffmpeg", "-y", 
+        "-f", "v4l2", 
+        "-i", "/dev/video0",                                
+        "-c:v", "libx264",          
         "-preset", "ultrafast", "-tune", "zerolatency",
         "-b:v", "2M", "-maxrate", "2M", "-bufsize", "4M",           
         "-pix_fmt", "yuv420p", "-g", "30", "-f", "mpegts",
