@@ -1,25 +1,23 @@
-# 1. Start with the slim bookworm base image
-FROM python:3.11-slim-bookworm
+# 1. Use the official Raspberry Pi foundation base image
+FROM bscheng/raspberrypi-os:bookworm-slim
 
-# 2. Add the official Raspberry Pi repository keys and sources
-RUN apt-get update && apt-get install -y curl gnupg && \
-    curl -fsSL https://archive.raspberrypi.org/debian/raspberrypi.gpg.key | gpg --dearmor -o /etc/apt/trusted.gpg.d/raspberrypi.gpg && \
-    echo "deb http://archive.raspberrypi.org/debian/ bookworm main" > /etc/apt/sources.list.d/raspi.list
-
-# 3. Install FFmpeg and the real Pi camera tools from the raspi repo
+# 2. Update and install Python, FFmpeg, and the pre-compiled camera utilities
 RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    python3-requests \
     ffmpeg \
     libcamera-apps \
     && rm -rf /var/lib/apt/lists/*
 
-# 4. Explicitly install the Python requests module via pip
-RUN pip install --no-cache-dir requests
+# 3. Double-check Python dependencies match
+RUN pip3 install --no-cache-dir --break-system-packages requests
 
-# 5. Set the working directory
+# 4. Set the working directory
 WORKDIR /app
 
-# 6. Copy your script into the container
+# 5. Copy your main execution script into the container
 COPY mainfleet.py .
 
-# 7. Run the script
+# 6. Run the fleet monitor
 CMD ["python3", "mainfleet.py"]
