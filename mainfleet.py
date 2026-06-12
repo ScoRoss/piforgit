@@ -62,11 +62,13 @@ def comms_loop():
         time.sleep(5)
 
 def build_ffmpeg_cmd(srt_target_url):
-    """Generates a safe baseline V4L2 command using native camera defaults."""
     return [
         "ffmpeg", "-y", 
         "-f", "v4l2", 
-        "-i", "/dev/video0", # Let the driver pick the easiest, lowest-bandwidth default size
+        "-input_format", "mjpeg",   
+        "-video_size", "1280x720",  
+        "-framerate", "15",        
+        "-i", "/dev/video0",
         "-c:v", "libx264",          
         "-preset", "ultrafast", 
         "-tune", "zerolatency",
@@ -74,7 +76,7 @@ def build_ffmpeg_cmd(srt_target_url):
         "-maxrate", "1.5M", 
         "-bufsize", "3M",           
         "-pix_fmt", "yuv420p", 
-        "-g", "30", 
+        "-g", "30",                 
         "-f", "mpegts",
         srt_target_url
     ]
