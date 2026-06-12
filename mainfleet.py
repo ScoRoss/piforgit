@@ -87,7 +87,7 @@ def manage_stream():
             print(f"[+] Paired with {assigned_driver}. Engaging Camera targeting {current_stream_url}...")
             dynamic_cmd = build_ffmpeg_cmd(current_stream_url)
             
-            # FIX: Remove the stdout pipe trap. Let FFmpeg output directly to the console or a file.
+            # First instance: Handled correctly via shell
             stream_process = subprocess.Popen(dynamic_cmd, shell=True)
             current_status = "STREAMING"
         
@@ -96,7 +96,9 @@ def manage_stream():
             if stream_process and stream_process.poll() is not None:
                 print("[!] Stream crashed or connection lost. Attempting self-heal...")
                 dynamic_cmd = build_ffmpeg_cmd(current_stream_url)
-                stream_process = subprocess.Popen(dynamic_cmd)
+                
+                # FIXED: Added shell=True here so self-healing doesn't crash the script
+                stream_process = subprocess.Popen(dynamic_cmd, shell=True)
         
         elif current_status == "STOPPING":
             if stream_process:
