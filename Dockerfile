@@ -1,23 +1,17 @@
-# 1. Use the official Raspberry Pi foundation base image
-FROM bscheng/raspberrypi-os:bookworm-slim
+# 1. Use the official Python image for Raspberry Pi (ARM64)
+FROM python:3.11-slim-bookworm
 
-# 2. Update and install Python, FFmpeg, and the pre-compiled camera utilities
-RUN apt-get update && apt-get install -y \
-    python3 \
-    python3-pip \
-    python3-requests \
-    ffmpeg \
-    libcamera-apps \
-    && rm -rf /var/lib/apt/lists/*
+# 2. Install standard FFmpeg and v4l utilities
+RUN apt-get update && apt-get install -y ffmpeg v4l-utils && rm -rf /var/lib/apt/lists/*
 
-# 3. Double-check Python dependencies match
-RUN pip3 install --no-cache-dir --break-system-packages requests
+# 3. Install Python dependencies
+RUN pip install --no-cache-dir requests
 
 # 4. Set the working directory
 WORKDIR /app
 
-# 5. Copy your main execution script into the container
+# 5. Copy your script into the container
 COPY mainfleet.py .
 
-# 6. Run the fleet monitor
+# 6. Run the script
 CMD ["python3", "mainfleet.py"]
