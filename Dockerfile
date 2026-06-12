@@ -6,10 +6,10 @@ RUN apt-get update && apt-get install -y curl gnupg && \
     curl -fsSL https://archive.raspberrypi.org/debian/raspberrypi.gpg.key | gpg --dearmor -o /etc/apt/trusted.gpg.d/raspberrypi.gpg && \
     echo "deb http://archive.raspberrypi.org/debian/ bookworm main" > /etc/apt/sources.list.d/raspi.list
 
-# 3. Install FFmpeg and the real Pi camera tools
+# 3. Install FFmpeg and the real Pi camera tools from the raspi repo
 RUN apt-get update && apt-get install -y \
     ffmpeg \
-    rpi-camera-apps \
+    libcamera-apps \
     && rm -rf /var/lib/apt/lists/*
 
 # 4. Explicitly install the Python requests module via pip
