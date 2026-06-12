@@ -78,11 +78,7 @@ def build_ffmpeg_cmd(srt_target_url):
         "-f", "mpegts",
         srt_target_url
     ]
-def build_ffmpeg_cmd(srt_target_url):
-    """Generates a libcamera pipeline piped directly into FFmpeg."""
-    # libcamera pulls the hardware feed flawlessly, FFmpeg just packages it to SRT
-    return f"libcamera-vid -t 0 --inline --width 1280 --height 720 --framerate 15 -o - | ffmpeg -i - -c:v copy -f mpegts {srt_target_url}"
-    
+
 def manage_stream():
     """Main thread: Turns the camera on or off based on the current status."""
     global current_status, stream_process, current_stream_url
