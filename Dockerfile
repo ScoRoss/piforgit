@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y curl gnupg && \
 # 3. Install FFmpeg and the real Pi camera tools
 RUN apt-get update && apt-get install -y \
     ffmpeg \
-    libcamera-apps \
+    rpi-camera-apps \
     && rm -rf /var/lib/apt/lists/*
 
 # 4. Explicitly install the Python requests module via pip
