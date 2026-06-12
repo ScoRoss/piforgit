@@ -1,13 +1,16 @@
-# 1. Use the official Python image for Raspberry Pi (ARM64)
+# 1. Start with the slim bookworm base image
 FROM python:3.11-slim-bookworm
 
-# 2. Install FFmpeg and hardware libraries
-# v4l-utils is added to help with camera detection
-RUN apt-get update && apt-get install -y ffmpeg libcamera-apps python3-requests
+# 2. Add the official Raspberry Pi repository keys and sources so apt can find libcamera-apps
+RUN apt-get update && apt-get install -y curl gnupg && \
+    curl -fsSL https://archive.raspberrypi.org/debian/raspberrypi.gpg.key | gpg --dearmor -o /etc/apt/trusted.gpg.d/raspberrypi.gpg && \
+    echo "deb http://archive.raspberrypi.org/debian/ bookworm main" > /etc/apt/sources.list.d/raspi.list
 
-# 3. Install Python dependencies
-# We install 'requests' here so the heartbeat logic works
-RUN pip install --no-cache-dir requests
+# 3. Install FFmpeg, the real Pi camera tools, and clean up apt cache to keep the image small
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    libcamera-apps \
+    && rm -rf /var/lib/apt/lists/*
 
 # 4. Set the working directory
 WORKDIR /app
