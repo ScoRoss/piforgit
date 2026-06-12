@@ -88,7 +88,7 @@ def manage_stream():
             dynamic_cmd = build_ffmpeg_cmd(current_stream_url)
             
             # FIX: Remove the stdout pipe trap. Let FFmpeg output directly to the console or a file.
-            stream_process = subprocess.Popen(dynamic_cmd)
+            stream_process = subprocess.Popen(dynamic_cmd, shell=True)
             current_status = "STREAMING"
         
         elif current_status == "STREAMING":
