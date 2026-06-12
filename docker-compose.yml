@@ -11,7 +11,7 @@ services:
     devices:
       - "/dev/video0:/dev/video0"
       - "/dev/video1:/dev/video1"
-      - "/dev/media3:/dev/media3" e
+      - "/dev/media3:/dev/media3"
       - "/dev/vchiq:/dev/vchiq"     
       - "/dev/dma_heap:/dev/dma_heap" 
       
