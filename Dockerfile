@@ -3,10 +3,7 @@ FROM python:3.11-slim-bookworm
 
 # 2. Install FFmpeg and hardware libraries
 # v4l-utils is added to help with camera detection
-RUN apt-get update && apt-get install -y \
-    ffmpeg \
-    v4l-utils \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y ffmpeg libcamera-apps python3-requests
 
 # 3. Install Python dependencies
 # We install 'requests' here so the heartbeat logic works
