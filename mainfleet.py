@@ -4,6 +4,7 @@ import sys
 import time
 import threading
 import requests
+import signal
 
 # CONFIGURATION
 SERVER_IP = os.getenv("SERVER_IP", "100.97.37.123") 
@@ -61,56 +62,61 @@ def comms_loop():
         
         time.sleep(5)
 
+
+
+def kill_stale_ffmpeg():
+    """Make sure no orphaned ffmpeg process is holding /dev/video0."""
+    subprocess.run(["pkill", "-9", "-f", "ffmpeg.*video0"], stderr=subprocess.DEVNULL)
+    time.sleep(1)  # give the kernel a moment to release the device
+
 def build_ffmpeg_cmd(srt_target_url):
     return [
-        "ffmpeg", "-y", 
-        "-f", "v4l2", 
-        "-input_format", "mjpeg",   
-        "-video_size", "1280x720",  
-        "-framerate", "15",        
+        "ffmpeg", "-y",
+        "-f", "v4l2",
+        "-input_format", "mjpeg",
+        "-video_size", "1280x720",
+        "-framerate", "15",
         "-i", "/dev/video0",
-        "-c:v", "libx264",          
-        "-preset", "ultrafast", 
+        "-c:v", "libx264",
+        "-preset", "ultrafast",
         "-tune", "zerolatency",
-        "-b:v", "1.5M", 
-        "-maxrate", "1.5M", 
-        "-bufsize", "3M",           
-        "-pix_fmt", "yuv420p", 
-        "-g", "30",                 
+        "-b:v", "1.5M",
+        "-maxrate", "1.5M",
+        "-bufsize", "3M",
+        "-pix_fmt", "yuv420p",
+        "-g", "30",
         "-f", "mpegts",
         srt_target_url
     ]
 
 def manage_stream():
-    """Main thread: Turns the camera on or off based on the current status."""
     global current_status, stream_process, current_stream_url
-    
+
     while True:
         if current_status == "STARTING":
             print(f"[+] Paired with {assigned_driver}. Engaging Camera targeting {current_stream_url}...")
+            kill_stale_ffmpeg()
             dynamic_cmd = build_ffmpeg_cmd(current_stream_url)
-            
-            # First instance: Handled correctly via shell
             stream_process = subprocess.Popen(dynamic_cmd)
             current_status = "STREAMING"
-        
+
         elif current_status == "STREAMING":
-            # If the process actually dies, handle the crash
             if stream_process and stream_process.poll() is not None:
                 print("[!] Stream crashed or connection lost. Attempting self-heal...")
+                kill_stale_ffmpeg()
+                time.sleep(2)  # let the camera hardware settle before reopening
                 dynamic_cmd = build_ffmpeg_cmd(current_stream_url)
-                
-                # FIXED: Added shell=True here so self-healing doesn't crash the script
                 stream_process = subprocess.Popen(dynamic_cmd)
-        
+
         elif current_status == "STOPPING":
             if stream_process:
                 print("[-] Unpaired. Disengaging Camera pipeline...")
                 stream_process.terminate()
                 stream_process.wait()
                 stream_process = None
+                kill_stale_ffmpeg()  # belt and braces
             current_status = "AVAILABLE"
-            
+
         time.sleep(1)
 
 if __name__ == "__main__":
