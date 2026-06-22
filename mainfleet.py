@@ -4,12 +4,11 @@ import sys
 import time
 import threading
 import requests
-import signal
 
 # CONFIGURATION
-SERVER_IP = os.getenv("SERVER_IP", "100.97.37.123") 
+SERVER_IP = os.getenv("SERVER_IP", "100.97.37.123")
 UNIT_ID = os.getenv("UNIT_ID", "UNASSIGNED_PI")
-BASE_API_URL = "https://27carslivestream.co.uk"
+BASE_API_URL = os.getenv("SERVER_URL", "https://27carslivestream.co.uk")
 
 # STATE VARIABLES
 current_status = "AVAILABLE"  # Boots up idle
@@ -17,16 +16,24 @@ assigned_driver = None
 stream_process = None
 current_stream_url = ""
 
+
+def kill_stale_ffmpeg():
+    """Make sure no orphaned ffmpeg process is holding /dev/video0."""
+    subprocess.run(
+        ["sh", "-c", "pkill -9 -f 'ffmpeg.*video0' 2>/dev/null || true"]
+    )
+    time.sleep(1)  # give the kernel a moment to release the device
+
+
 def comms_loop():
     """Background thread: Sends status AND asks for commands every 5 seconds."""
     global current_status, assigned_driver, current_stream_url
-    
-    # Construct urls dynamically to ensure any runtime identity adjustments are clean
+
     status_url = f"{BASE_API_URL}/api/status"
     command_url = f"{BASE_API_URL}/api/command?unit_id={UNIT_ID}"
-    
+
     print(f"[*] Comms thread polling started for Unit ID: {UNIT_ID}")
-    
+
     while True:
         # 1. SEND HEARTBEAT
         try:
@@ -36,7 +43,7 @@ def comms_loop():
                 "driver": assigned_driver
             }, timeout=5)
         except Exception:
-            pass 
+            pass
 
         # 2. CHECK FOR COMMANDS
         try:
@@ -44,30 +51,38 @@ def comms_loop():
             if response.status_code == 200:
                 data = response.json()
                 command = data.get("command")
-                
-                if command == "PAIR" and current_status != "STREAMING" and current_status != "STARTING":
+
+                if command == "PAIR" and current_status not in ("STREAMING", "STARTING"):
                     assigned_driver = data.get("driver", "Unknown")
                     target_ip = data.get("stream_target", SERVER_IP)
                     stream_key = data.get("stream_key", UNIT_ID)
-                    
-                    # TUNED: Latency dropped from 30s (30000000) to 300ms (300000)
-                    current_stream_url = f"srt://{target_ip}:8890?streamid=publish:{stream_key}&latency=300000&mode=caller&conntimeout=5000000"
+
+                    current_stream_url = (
+                        f"srt://{target_ip}:8890?streamid=publish:{stream_key}"
+                        f"&latency=300000&mode=caller&conntimeout=5000000"
+                    )
                     current_status = "STARTING"
-                
+
+                elif command == "STOP_STREAM" and current_status in ("STREAMING", "STARTING"):
+                    # End of job: stop the camera/ffmpeg but keep the driver paired.
+                    print("[*] STOP_STREAM received. Ending job stream, staying paired.")
+                    current_status = "STOPPING_STREAM"
+
                 elif command == "UNPAIR" and current_status != "AVAILABLE":
+                    # End of shift / disconnect: stop everything and go fully idle.
+                    print("[*] UNPAIR received. Ending shift.")
                     assigned_driver = None
                     current_status = "STOPPING"
+
+                elif command == "PANIC":
+                    # Panic is informational only — does not change streaming state.
+                    print("[!] PANIC ACK received from server. No local action taken.")
+
         except Exception as e:
             print(f"[!] Network error checking command gateway: {e}")
-        
+
         time.sleep(5)
 
-
-
-def kill_stale_ffmpeg():
-    """Make sure no orphaned ffmpeg process is holding /dev/video0."""
-    subprocess.run(["pkill", "-9", "-f", "ffmpeg.*video0"], stderr=subprocess.DEVNULL)
-    time.sleep(1)  # give the kernel a moment to release the device
 
 def build_ffmpeg_cmd(srt_target_url):
     return [
@@ -89,7 +104,9 @@ def build_ffmpeg_cmd(srt_target_url):
         srt_target_url
     ]
 
+
 def manage_stream():
+    """Main thread: turns the camera on/off based on the current status."""
     global current_status, stream_process, current_stream_url
 
     while True:
@@ -101,6 +118,7 @@ def manage_stream():
             current_status = "STREAMING"
 
         elif current_status == "STREAMING":
+            # Self-heal if the process died unexpectedly
             if stream_process and stream_process.poll() is not None:
                 print("[!] Stream crashed or connection lost. Attempting self-heal...")
                 kill_stale_ffmpeg()
@@ -108,20 +126,32 @@ def manage_stream():
                 dynamic_cmd = build_ffmpeg_cmd(current_stream_url)
                 stream_process = subprocess.Popen(dynamic_cmd)
 
+        elif current_status == "STOPPING_STREAM":
+            # Job ended: stop ffmpeg, but the driver remains paired to this unit.
+            if stream_process:
+                print("[-] Job ended. Stopping camera, remaining paired to driver.")
+                stream_process.terminate()
+                stream_process.wait()
+                stream_process = None
+                kill_stale_ffmpeg()
+            current_status = "PAIRED_IDLE"
+
         elif current_status == "STOPPING":
+            # Full unpair: stop everything and go back to AVAILABLE.
             if stream_process:
                 print("[-] Unpaired. Disengaging Camera pipeline...")
                 stream_process.terminate()
                 stream_process.wait()
                 stream_process = None
-                kill_stale_ffmpeg()  # belt and braces
+                kill_stale_ffmpeg()
             current_status = "AVAILABLE"
 
         time.sleep(1)
 
+
 if __name__ == "__main__":
     print(f"--- {UNIT_ID} BOOTED. WAITING FOR DISPATCH ---")
-    
+
     comms_thread = threading.Thread(target=comms_loop, daemon=True)
     comms_thread.start()
 
