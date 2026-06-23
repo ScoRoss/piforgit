@@ -88,10 +88,7 @@ def build_ffmpeg_cmd(srt_target_url):
     return [
         "ffmpeg", "-y",
         "-f", "v4l2",
-        "-input_format", "mjpeg",
-        "-video_size", "1280x720",
-        "-framerate", "15",
-        "-i", "/dev/video0",
+        "-i", "/dev/video0",        # no -input_format, no -video_size, no -framerate
         "-c:v", "libx264",
         "-preset", "ultrafast",
         "-tune", "zerolatency",
@@ -103,7 +100,6 @@ def build_ffmpeg_cmd(srt_target_url):
         "-f", "mpegts",
         srt_target_url
     ]
-
 
 def manage_stream():
     """Main thread: turns the camera on/off based on the current status."""
