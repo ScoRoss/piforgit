@@ -88,7 +88,10 @@ def build_ffmpeg_cmd(srt_target_url):
     return [
         "ffmpeg", "-y",
         "-f", "v4l2",
-        "-i", "/dev/video0",        # no -input_format, no -video_size, no -framerate
+        "-input_format", "mjpeg",
+        "-video_size", "1280x720",
+        "-framerate", "30",
+        "-i", "/dev/video0",
         "-c:v", "libx264",
         "-preset", "ultrafast",
         "-tune", "zerolatency",
