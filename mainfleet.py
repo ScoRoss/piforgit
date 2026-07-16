@@ -84,26 +84,36 @@ def comms_loop():
         time.sleep(5)
 
 
-def build_ffmpeg_cmd(srt_target_url):
+def build_ffmpeg_cmd(srt_target_url, driver_name="Unknown"):
+    overlay_text = f"Driver: {driver_name} | %{{localtime:%d/%m/%Y %H:%M:%S}}"
     return [
         "ffmpeg", "-y",
         "-f", "v4l2",
         "-input_format", "mjpeg",
         "-video_size", "1280x720",
-        "-framerate", "30",
+        "-framerate", "15",           # half the native rate — still smooth enough
         "-i", "/dev/video0",
+        "-vf", (
+            f"drawtext=text='{overlay_text}'"
+            ":fontcolor=white"
+            ":fontsize=24"
+            ":box=1"
+            ":boxcolor=black@0.5"
+            ":boxborderw=6"
+            ":x=10"
+            ":y=10"
+        ),
         "-c:v", "libx264",
         "-preset", "ultrafast",
         "-tune", "zerolatency",
-        "-b:v", "1.5M",
-        "-maxrate", "1.5M",
-        "-bufsize", "3M",
+        "-b:v", "800k",               # drop from 1.5M to 800k for spotty 5G
+        "-maxrate", "800k",
+        "-bufsize", "1600k",
         "-pix_fmt", "yuv420p",
-        "-g", "30",
+        "-g", "15",                   # keyframe every second at 15fps
         "-f", "mpegts",
         srt_target_url
     ]
-
 def manage_stream():
     """Main thread: turns the camera on/off based on the current status."""
     global current_status, stream_process, current_stream_url
