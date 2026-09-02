@@ -100,7 +100,9 @@ def comms_loop():
 
 
 def build_ffmpeg_cmd(srt_target_url, driver_name="Unknown"):
-    overlay_text = f"Driver: {driver_name} | %{{localtime:%d/%m/%Y %H:%M:%S}}"
+    # Overlay removed - the drawtext filter isn't reliably available across
+    # the fleet's ffmpeg builds (see the working reference unit, which never
+    # had it). Raw feed only for now.
     return [
         "ffmpeg", "-y",
         "-f", "v4l2",
@@ -108,16 +110,6 @@ def build_ffmpeg_cmd(srt_target_url, driver_name="Unknown"):
         "-video_size", "1280x720",
         "-framerate", "15",           # half the native rate — still smooth enough
         "-i", "/dev/video0",
-        "-vf", (
-            f"drawtext=text='{overlay_text}'"
-            ":fontcolor=white"
-            ":fontsize=24"
-            ":box=1"
-            ":boxcolor=black@0.5"
-            ":boxborderw=6"
-            ":x=10"
-            ":y=10"
-        ),
         "-c:v", "libx264",
         "-preset", "ultrafast",
         "-tune", "zerolatency",
@@ -129,6 +121,8 @@ def build_ffmpeg_cmd(srt_target_url, driver_name="Unknown"):
         "-f", "mpegts",
         srt_target_url
     ]
+
+
 def manage_stream():
     """Main thread: turns the camera on/off based on the current status."""
     global current_status, stream_process, current_stream_url
