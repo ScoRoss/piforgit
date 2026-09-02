@@ -10,6 +10,17 @@ SERVER_IP = os.getenv("SERVER_IP", "100.97.37.123")
 UNIT_ID = os.getenv("UNIT_ID", "UNASSIGNED_PI")
 BASE_API_URL = os.getenv("SERVER_URL", "https://27carslivestream.co.uk")
 
+# The API now requires this on /api/status and /api/command. This is the
+# DEVICE-level secret, deliberately separate from the dashboard/admin
+# secret the server uses for pairing and stream start/stop - a leaked Pi
+# only exposes device-level access, never admin-level. Must match
+# VAULT_DEVICE_SECRET set on the server exactly, or every poll will 401.
+DEVICE_SECRET = os.getenv("DEVICE_SECRET", "")
+if not DEVICE_SECRET:
+    print("[!] WARNING: DEVICE_SECRET is not set. Server will reject this unit's "
+          "status/command requests with 401 once the hardened API is deployed.")
+AUTH_HEADERS = {"Authorization": f"Bearer {DEVICE_SECRET}"}
+
 # STATE VARIABLES
 current_status = "AVAILABLE"  # Boots up idle
 assigned_driver = None
@@ -37,18 +48,22 @@ def comms_loop():
     while True:
         # 1. SEND HEARTBEAT
         try:
-            requests.post(status_url, json={
+            resp = requests.post(status_url, json={
                 "unit_id": UNIT_ID,
                 "status": current_status,
                 "driver": assigned_driver
-            }, timeout=5)
+            }, headers=AUTH_HEADERS, timeout=5)
+            if resp.status_code == 401:
+                print("[!] Heartbeat rejected (401) — DEVICE_SECRET mismatch with server.")
         except Exception:
             pass
 
         # 2. CHECK FOR COMMANDS
         try:
-            response = requests.get(command_url, timeout=5)
-            if response.status_code == 200:
+            response = requests.get(command_url, headers=AUTH_HEADERS, timeout=5)
+            if response.status_code == 401:
+                print("[!] Command poll rejected (401) — DEVICE_SECRET mismatch with server.")
+            elif response.status_code == 200:
                 data = response.json()
                 command = data.get("command")
 
